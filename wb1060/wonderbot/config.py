@@ -113,6 +113,13 @@ class BackendConfig:
     hf_device: str = ''
     hf_device_map: str = ''
     hf_torch_dtype: str = 'auto'
+    hf_offload_dir: str = ''
+    hf_use_chat_template: bool = True
+    hf_load_in_4bit: bool = False
+    hf_quant_type: str = 'nf4'
+    hf_compute_dtype: str = 'float16'
+    hf_double_quant: bool = True
+    hf_trust_remote_code: bool = False
     max_new_tokens: int = 120
     temperature: float = 0.8
     delta_scale: float = 0.24
@@ -144,6 +151,10 @@ class RuntimeConfig:
     hf_llm_device: str = ''
     hf_llm_device_map: str = ''
     hf_llm_torch_dtype: str = 'auto'
+    hf_llm_load_in_4bit: bool = False
+    hf_llm_quant_type: str = 'nf4'
+    hf_llm_compute_dtype: str = 'float16'
+    hf_llm_double_quant: bool = True
     offload_dir: str = 'state/offload'
 
 

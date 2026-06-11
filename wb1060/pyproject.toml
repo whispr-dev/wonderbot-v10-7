@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wonderbot"
-version = "0.10.6.0"
-description = "Continuous agent base with event-coded memory, live multimodal sensing, replay logs, self-model, durable goals, controlled tool/action execution, and phase-10.6 configurability-first runtime/device routing: per-component CPU/CUDA selection, HF backend device_map scaffolding, hardware diagnostics, and machine-profile configs for CPU, tactical-GPU, and dual-GPU deployments."
+version = "0.10.7.0"
+description = "Continuous agent base with event-coded memory, live multimodal sensing, replay logs, self-model, durable goals, controlled tool/action execution, and phase-10.7 server-ready runtime/device routing: per-component CPU/CUDA selection, 4-bit HF backend support, dual-P40 deployment profiles, and Ubuntu 22.04 server bootstrap assets."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -63,6 +63,16 @@ hf-voice = [
   "numpy>=1.26.0",
   "datasets>=2.18.0",
   "sentencepiece>=0.2.0"
+]
+
+server-hf = [
+  "transformers>=4.40.0",
+  "accelerate>=0.30.0",
+  "bitsandbytes>=0.48.0",
+  "torch>=2.3.0",
+  "torchaudio>=2.3.0",
+  "sentencepiece>=0.2.0",
+  "safetensors>=0.4.0"
 ]
 dev = [
   "pytest>=8.0.0"

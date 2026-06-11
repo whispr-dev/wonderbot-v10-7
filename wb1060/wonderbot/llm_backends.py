@@ -257,6 +257,9 @@ class HFBackend:
         self.model_name = config.hf_model
         self.max_new_tokens = config.max_new_tokens
         self.temperature = config.temperature
+        self.use_chat_template = bool(config.hf_use_chat_template)
+        self.trust_remote_code = bool(config.hf_trust_remote_code)
+        self.quantized_4bit = bool(config.hf_load_in_4bit)
         self.planner = LVTCPlanner(
             codec=codec,
             delta_scale=config.delta_scale,
@@ -269,28 +272,46 @@ class HFBackend:
         )
         self._device = choose_component_device(config.hf_device or 'auto', 'auto')
         self.resolved_device = self._device.resolved
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.offload_dir = ensure_offload_dir(config.hf_offload_dir or 'state/offload')
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, trust_remote_code=self.trust_remote_code)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         dtype = parse_torch_dtype(config.hf_torch_dtype)
-        model_kwargs = {}
+        compute_dtype = parse_torch_dtype(config.hf_compute_dtype)
+        model_kwargs = {'trust_remote_code': self.trust_remote_code}
         if dtype not in {None, 'auto'}:
             model_kwargs['torch_dtype'] = dtype
+        if self.quantized_4bit:
+            try:
+                from transformers import BitsAndBytesConfig
+            except ImportError as exc:
+                raise RuntimeError(
+                    '4-bit HF backend requested, but bitsandbytes support is unavailable. '
+                    'Install with: pip install -e .[server-hf]'
+                ) from exc
+            if compute_dtype in {None, 'auto'}:
+                compute_dtype = torch.float16
+            model_kwargs['quantization_config'] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type=config.hf_quant_type,
+                bnb_4bit_compute_dtype=compute_dtype,
+                bnb_4bit_use_double_quant=bool(config.hf_double_quant),
+            )
         if config.hf_device_map:
             model_kwargs['device_map'] = config.hf_device_map
-            model_kwargs['offload_folder'] = ensure_offload_dir('state/offload')
+            model_kwargs['offload_folder'] = self.offload_dir
             model_kwargs['low_cpu_mem_usage'] = True
             self.model = AutoModelForCausalLM.from_pretrained(self.model_name, **model_kwargs)
         else:
             self.model = AutoModelForCausalLM.from_pretrained(self.model_name, **model_kwargs)
-            if self.resolved_device != 'cpu':
+            if self.resolved_device != 'cpu' and not self.quantized_4bit:
                 self.model = self.model.to(self.resolved_device)
         self.model.eval()
 
     def generate(self, stimulus: str, memories: List[MemoryItem], style: str, spontaneous: bool = False) -> BackendResult:
         plan = self.planner.propose(stimulus=stimulus, memories=memories, spontaneous=spontaneous)
         prompt = _build_prompt(stimulus=stimulus, memories=memories, style=style, spontaneous=spontaneous, plan=plan)
-        encoded = self.tokenizer(prompt, return_tensors="pt")
+        encoded = self._encode_prompt(prompt)
         if hasattr(self.model, 'device'):
             encoded = {key: value.to(self.model.device) for key, value in encoded.items()}
         with self._torch.inference_mode():
@@ -305,7 +326,27 @@ class HFBackend:
         text = self.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
         if not text:
             text = "I had the shape of a response, but the backend returned silence."
-        return BackendResult(text=text, backend_name=self.name, metadata={"imagination": plan.accepted})
+        return BackendResult(text=text, backend_name=self.name, metadata={"imagination": plan.accepted, 'model': self.model_name, 'quantized_4bit': self.quantized_4bit})
+
+    def _encode_prompt(self, prompt: str):
+        if self.use_chat_template and getattr(self.tokenizer, 'chat_template', None):
+            messages = [
+                {
+                    'role': 'system',
+                    'content': 'You are WonderBot: grounded, concise, warm, and helpful. Answer from the current thread and use at most one controlled imaginative step if it helps.',
+                },
+                {'role': 'user', 'content': prompt},
+            ]
+            try:
+                return self.tokenizer.apply_chat_template(
+                    messages,
+                    add_generation_prompt=True,
+                    return_tensors='pt',
+                    return_dict=True,
+                )
+            except TypeError:
+                pass
+        return self.tokenizer(prompt, return_tensors='pt')
 
 
 def create_backend(config: BackendConfig, codec: EventCodec) -> TextBackend:

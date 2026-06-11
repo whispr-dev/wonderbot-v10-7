@@ -86,6 +86,16 @@ class WonderBot:
             self.config.backend.hf_device_map = self.config.runtime.hf_llm_device_map
         if (not self.config.backend.hf_torch_dtype or self.config.backend.hf_torch_dtype == 'auto') and self.config.runtime.hf_llm_torch_dtype:
             self.config.backend.hf_torch_dtype = self.config.runtime.hf_llm_torch_dtype
+        if not self.config.backend.hf_offload_dir:
+            self.config.backend.hf_offload_dir = self.config.runtime.offload_dir
+        if not self.config.backend.hf_load_in_4bit and self.config.runtime.hf_llm_load_in_4bit:
+            self.config.backend.hf_load_in_4bit = True
+        if self.config.backend.hf_quant_type == 'nf4' and self.config.runtime.hf_llm_quant_type:
+            self.config.backend.hf_quant_type = self.config.runtime.hf_llm_quant_type
+        if self.config.backend.hf_compute_dtype == 'float16' and self.config.runtime.hf_llm_compute_dtype:
+            self.config.backend.hf_compute_dtype = self.config.runtime.hf_llm_compute_dtype
+        if self.config.backend.hf_double_quant is True and self.config.runtime.hf_llm_double_quant is not None:
+            self.config.backend.hf_double_quant = self.config.runtime.hf_llm_double_quant
         if not self.config.tts.device:
             self.config.tts.device = self.config.runtime.tts_device or self.config.runtime.default_device
         if not self.config.tts.hf_device:
